@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Touchpad Gesture Manager
+GenericName=Touchpad Gesture Remapper
+Comment=Lightweight background touchpad gesture manager and keystroke remapper
+Exec=gesture-manager
+Icon=gesture-manager
+Terminal=false
+Categories=Utility;Settings;HardwareSettings;
+Keywords=touchpad;gesture;swipe;pinch;input;remapper;libinput;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true

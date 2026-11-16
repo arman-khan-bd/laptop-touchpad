@@ -1,0 +1,66 @@
+[package]
+name = "gesture-manager"
+version = "0.1.0"
+edition = "2021"
+authors = ["Touchpad Gesture Manager Maintainers"]
+description = "Lightweight cross-platform laptop touchpad gesture manager & remapper daemon"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "gesture-manager"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+notify = "6.1"
+dirs = "5.0"
+crossbeam-channel = "0.5"
+log = "0.4"
+env_logger = "0.11"
+enigo = "0.6.1"
+tray-icon = "0.19"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_UI_Input",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
+    "Win32_Devices_HumanInterfaceDevice",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_Security",
+] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+input = "0.9"
+udev = "0.7"
+libc = "0.2"
+
+[package.metadata.deb]
+name = "gesture-manager"
+maintainer = "Gesture Manager Team <dev@example.com>"
+copyright = "2026, Gesture Manager Team"
+extended-description = """\
+A lightweight, background touchpad gesture manager and remapper for Linux laptops. \
+Intercepts raw multi-touch gestures (3-finger and 4-finger swipes, pinches, taps) \
+via libinput/udev without requiring compositor lock-in, and maps them to customizable \
+actions such as keyboard shortcuts and shell scripts."""
+depends = "$auto, libinput10, libudev1"
+section = "utils"
+priority = "optional"
+assets = [
+    ["target/release/gesture-manager", "usr/bin/gesture-manager", "755"],
+    ["assets/gesture-manager.desktop", "usr/share/applications/gesture-manager.desktop", "644"],
+    ["assets/99-touchpad-gestures.rules", "etc/udev/rules.d/99-touchpad-gestures.rules", "644"],
+    ["assets/icon.png", "usr/share/icons/hicolor/128x128/apps/gesture-manager.png", "644"],
+]
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/gesture-manager", dest = "/usr/bin/gesture-manager", mode = "755" },
+    { source = "assets/gesture-manager.desktop", dest = "/usr/share/applications/gesture-manager.desktop", mode = "644" },
+    { source = "assets/99-touchpad-gestures.rules", dest = "/etc/udev/rules.d/99-touchpad-gestures.rules", mode = "644" },
+    { source = "assets/icon.png", dest = "/usr/share/icons/hicolor/128x128/apps/gesture-manager.png", mode = "644" },
+]
