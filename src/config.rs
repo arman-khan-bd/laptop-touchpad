@@ -10,14 +10,10 @@ use std::sync::mpsc::channel;
 use std::thread;
 use std::time::Duration;
 
-/// An action mapped to a touchpad gesture.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ActionConfig {
-    /// Concise shortcut or shell command string.
-    /// Prefixes like "sh:", "cmd:", "exec:" designate shell commands; otherwise treated as hotkeys.
     Simple(String),
-    /// Explicit mapping with dedicated hotkey and/or shell command execution.
     Detailed {
         #[serde(default)]
         hotkey: Option<String>,
@@ -31,10 +27,7 @@ impl ActionConfig {
         match self {
             ActionConfig::Simple(s) => {
                 let lower = s.to_lowercase();
-                if lower.starts_with("sh:")
-                    || lower.starts_with("cmd:")
-                    || lower.starts_with("exec:")
-                {
+                if lower.starts_with("sh:") || lower.starts_with("cmd:") || lower.starts_with("exec:") {
                     None
                 } else {
                     Some(s.as_str())
@@ -63,54 +56,50 @@ impl ActionConfig {
     }
 }
 
-/// Global daemon configuration settings.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    /// Gesture sensitivity thresholds and tolerances.
     #[serde(default)]
     pub sensitivity: GestureSensitivity,
 
-    /// Minimum cooldown in milliseconds between distinct gesture triggers.
     #[serde(default = "default_cooldown_ms")]
     pub gesture_cooldown_ms: u64,
 
-    /// Touchpad gesture to action mappings.
     #[serde(default = "default_gestures")]
     pub gestures: HashMap<String, ActionConfig>,
 }
 
 fn default_cooldown_ms() -> u64 {
-    350
+    300
 }
 
 fn default_gestures() -> HashMap<String, ActionConfig> {
     let mut m = HashMap::new();
 
-    // 3-finger navigation
+    // 2-finger gestures
+    m.insert("swipe_left_2".into(), ActionConfig::Simple("browser_back".into()));
+    m.insert("swipe_right_2".into(), ActionConfig::Simple("browser_forward".into()));
+    m.insert("pinch_in".into(), ActionConfig::Simple("zoom_out".into()));
+    m.insert("pinch_out".into(), ActionConfig::Simple("zoom_in".into()));
+    m.insert("rotate_cw".into(), ActionConfig::Simple("volume_up".into()));
+    m.insert("rotate_ccw".into(), ActionConfig::Simple("volume_down".into()));
+
+    // 3-finger navigation and window control
     m.insert("swipe_left_3".into(), ActionConfig::Simple("Alt+Left".into()));
     m.insert("swipe_right_3".into(), ActionConfig::Simple("Alt+Right".into()));
-    m.insert("swipe_up_3".into(), ActionConfig::Simple("Super+Tab".into()));
-    m.insert("swipe_down_3".into(), ActionConfig::Simple("Super+D".into()));
+    m.insert("swipe_up_3".into(), ActionConfig::Simple("task_view".into()));
+    m.insert("swipe_down_3".into(), ActionConfig::Simple("show_desktop".into()));
+    m.insert("pinch_in_3".into(), ActionConfig::Simple("show_desktop".into()));
+    m.insert("pinch_out_3".into(), ActionConfig::Simple("task_view".into()));
+    m.insert("tap_3".into(), ActionConfig::Simple("browser_reopen_tab".into()));
+    m.insert("hold_3".into(), ActionConfig::Simple("volume_mute".into()));
 
-    // 4-finger virtual desktop and window control
-    m.insert(
-        "swipe_left_4".into(),
-        ActionConfig::Simple("Ctrl+Super+Left".into()),
-    );
-    m.insert(
-        "swipe_right_4".into(),
-        ActionConfig::Simple("Ctrl+Super+Right".into()),
-    );
-    m.insert("swipe_up_4".into(), ActionConfig::Simple("Super".into()));
-    m.insert("swipe_down_4".into(), ActionConfig::Simple("Super+M".into()));
-
-    // Pinch zoom
-    m.insert("pinch_in".into(), ActionConfig::Simple("Ctrl+Minus".into()));
-    m.insert("pinch_out".into(), ActionConfig::Simple("Ctrl+Plus".into()));
-
-    // Multi-finger taps
-    m.insert("tap_3".into(), ActionConfig::Simple("Ctrl+Shift+T".into()));
+    // 4-finger virtual desktops and global actions
+    m.insert("swipe_left_4".into(), ActionConfig::Simple("desktop_left".into()));
+    m.insert("swipe_right_4".into(), ActionConfig::Simple("desktop_right".into()));
+    m.insert("swipe_up_4".into(), ActionConfig::Simple("app_launcher".into()));
+    m.insert("swipe_down_4".into(), ActionConfig::Simple("minimize".into()));
     m.insert("tap_4".into(), ActionConfig::Simple("Super+A".into()));
+    m.insert("hold_4".into(), ActionConfig::Simple("media_play_pause".into()));
 
     m
 }
@@ -126,13 +115,11 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Resolve an action for a given triggered gesture.
     pub fn get_action(&self, gesture: &Gesture) -> Option<&ActionConfig> {
         let key = gesture.to_string();
         self.gestures.get(&key)
     }
 
-    /// Load configuration from file, or generate default config if not found.
     pub fn load_or_create(path: &Path) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         if path.exists() {
             let content = fs::read_to_string(path)?;
@@ -146,15 +133,15 @@ impl Config {
             let default_cfg = Config::default();
             let toml_str = toml::to_string_pretty(&default_cfg)?;
             let header = "# Touchpad Gesture Manager & Remapper Configuration\n\
-                          # Hotkeys support: Super, Ctrl, Alt, Shift, Tab, Left, Right, Up, Down, Return, Esc, etc.\n\
-                          # Shell scripts can be specified as: cmd: <command> or sh: <command>\n\n";
+                          # Supported actions: hotkeys (e.g., 'Super+Tab', 'Alt+Left'),\n\
+                          # named actions ('task_view', 'show_desktop', 'volume_up', 'media_play_pause', etc.),\n\
+                          # or shell commands ('cmd: <command>' or 'sh: <command>').\n\n";
             fs::write(path, format!("{}{}", header, toml_str))?;
             log::info!("Created default configuration at {}", path.display());
             Ok(default_cfg)
         }
     }
 
-    /// Determine default platform configuration file path.
     pub fn default_path() -> PathBuf {
         if let Some(mut base) = dirs::config_dir() {
             base.push("gesture-manager");
@@ -165,7 +152,6 @@ impl Config {
         }
     }
 
-    /// Spawn a filesystem watcher on `config_path` that emits reloaded configurations over a channel.
     pub fn spawn_watcher(
         config_path: PathBuf,
         tx: crossbeam_channel::Sender<Config>,
@@ -192,45 +178,24 @@ impl Config {
                     return;
                 }
 
-                log::info!("Watching configuration file changes in {}", watch_dir.display());
-
                 let canonical_target = config_path.file_name().map(|n| n.to_os_string());
 
                 while let Ok(event_res) = notify_rx.recv() {
-                    match event_res {
-                        Ok(Event { kind, paths, .. }) => {
-                            let is_relevant = match kind {
-                                EventKind::Modify(_) | EventKind::Create(_) => true,
-                                _ => false,
-                            };
+                    if let Ok(Event { kind, paths, .. }) = event_res {
+                        if matches!(kind, EventKind::Modify(_) | EventKind::Create(_)) {
+                            let matches_target = paths.iter().any(|p| {
+                                p.file_name().map(|n| n.to_os_string()) == canonical_target
+                            });
 
-                            if is_relevant {
-                                let matches_target = paths.iter().any(|p| {
-                                    p.file_name().map(|n| n.to_os_string()) == canonical_target
-                                });
-
-                                if matches_target {
-                                    // Debounce momentary file locks during text editor writes
-                                    thread::sleep(Duration::from_millis(50));
-                                    match fs::read_to_string(&config_path) {
-                                        Ok(content) => match toml::from_str::<Config>(&content) {
-                                            Ok(reloaded) => {
-                                                log::info!("Hot-reloaded configuration from {}", config_path.display());
-                                                let _ = tx.send(reloaded);
-                                            }
-                                            Err(e) => {
-                                                log::error!("Syntax error in {}: {}", config_path.display(), e);
-                                            }
-                                        },
-                                        Err(e) => {
-                                            log::warn!("Failed to read {}: {}", config_path.display(), e);
-                                        }
+                            if matches_target {
+                                thread::sleep(Duration::from_millis(50));
+                                if let Ok(content) = fs::read_to_string(&config_path) {
+                                    if let Ok(reloaded) = toml::from_str::<Config>(&content) {
+                                        log::info!("Hot-reloaded configuration from {}", config_path.display());
+                                        let _ = tx.send(reloaded);
                                     }
                                 }
                             }
-                        }
-                        Err(e) => {
-                            log::warn!("Config watcher event error: {}", e);
                         }
                     }
                 }

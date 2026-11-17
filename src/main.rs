@@ -30,6 +30,7 @@ OPTIONS:
         --no-tray          Run in headless mode without system tray icon
         --check-config     Validate the configuration file syntax and exit
         --list-gestures    List all recognized gesture identifiers and exit
+        --list-actions     List all built-in named actions and exit
     -h, --help             Print help information
     -v, --version          Print version information
 
@@ -44,23 +45,66 @@ CONFIGURATION:
 fn print_gestures() {
     println!(
         r#"Available Touchpad Gestures:
-  - swipe_left_3     (3-finger swipe left)
-  - swipe_right_3    (3-finger swipe right)
-  - swipe_up_3       (3-finger swipe up)
-  - swipe_down_3     (3-finger swipe down)
-  - swipe_left_4     (4-finger swipe left)
-  - swipe_right_4    (4-finger swipe right)
-  - swipe_up_4       (4-finger swipe up)
-  - swipe_down_4     (4-finger swipe down)
-  - pinch_in         (2-finger pinch inwards / zoom out)
-  - pinch_out        (2-finger pinch outwards / zoom in)
-  - tap_2            (2-finger tap)
-  - tap_3            (3-finger tap)
-  - tap_4            (4-finger tap)
+  2-Finger Gestures:
+    - swipe_left_2          (2-finger swipe left)
+    - swipe_right_2         (2-finger swipe right)
+    - swipe_up_2            (2-finger swipe up)
+    - swipe_down_2          (2-finger swipe down)
+    - pinch_in / pinch_in_2 (2-finger pinch inwards / zoom out)
+    - pinch_out / pinch_out_2 (2-finger pinch outwards / zoom in)
+    - rotate_cw             (2-finger twist clockwise)
+    - rotate_ccw            (2-finger twist counter-clockwise)
+    - tap_2                 (2-finger tap)
 
-Action Mappings:
-  - Hotkeys: e.g. "Super+Tab", "Alt+Left", "Ctrl+Shift+T", "Ctrl+Plus"
-  - Commands: e.g. "cmd: notify-send 'Gesture' 'Activated'" or "sh: ./my-script.sh"
+  3-Finger Gestures:
+    - swipe_left_3          (3-finger swipe left)
+    - swipe_right_3         (3-finger swipe right)
+    - swipe_up_3            (3-finger swipe up)
+    - swipe_down_3          (3-finger swipe down)
+    - pinch_in_3            (3-finger pinch in)
+    - pinch_out_3           (3-finger pinch out)
+    - tap_3                 (3-finger tap)
+    - hold_3                (3-finger tap and hold)
+
+  4-Finger Gestures:
+    - swipe_left_4          (4-finger swipe left)
+    - swipe_right_4         (4-finger swipe right)
+    - swipe_up_4            (4-finger swipe up)
+    - swipe_down_4          (4-finger swipe down)
+    - pinch_in_4            (4-finger pinch in)
+    - pinch_out_4           (4-finger pinch out)
+    - tap_4                 (4-finger tap)
+    - hold_4                (4-finger tap and hold)
+
+  Edge Swipes:
+    - edge_swipe_left       (Swipe from right edge inwards)
+    - edge_swipe_right      (Swipe from left edge inwards)
+    - edge_swipe_up         (Swipe from bottom edge upwards)
+    - edge_swipe_down       (Swipe from top edge downwards)
+"#
+    );
+}
+
+fn print_actions() {
+    println!(
+        r#"Available Action Mappings:
+  High-Level Semantic Named Actions:
+    - volume_up, volume_down, volume_mute
+    - media_play_pause, media_next, media_prev
+    - task_view, show_desktop, app_launcher
+    - snap_left, snap_right, maximize, minimize, close_window
+    - desktop_left, desktop_right
+    - browser_back, browser_forward, browser_refresh, browser_new_tab, browser_close_tab, browser_reopen_tab
+    - zoom_in, zoom_out, zoom_reset
+
+  Custom Hotkey Combinations:
+    - Modifier keys: Super (or Win), Ctrl, Alt, Shift
+    - Key tokens: Tab, Esc, Space, Left, Right, Up, Down, Return, Backspace, Plus, Minus, F1..F12
+    - Examples: "Super+Tab", "Alt+Left", "Ctrl+Shift+T", "Ctrl+Plus"
+
+  Shell Commands:
+    - Prefixed with cmd: or sh:
+    - Examples: "cmd: notepad.exe" or "sh: notify-send 'Gesture' 'Triggered'"
 "#
     );
 }
@@ -82,13 +126,13 @@ fn create_default_tray_icon() -> Icon {
             let is_contact = (dx * dx + dy * dy) <= 8;
 
             if is_contact {
-                rgba.extend_from_slice(&[59, 130, 246, 255]); // Azure Blue
+                rgba.extend_from_slice(&[59, 130, 246, 255]);
             } else if is_outer_border || is_button_split || is_divider {
-                rgba.extend_from_slice(&[203, 213, 225, 255]); // Slate 300
+                rgba.extend_from_slice(&[203, 213, 225, 255]);
             } else if x > 3 && x < 28 && y > 6 && y < 25 {
-                rgba.extend_from_slice(&[30, 41, 59, 240]); // Slate 800
+                rgba.extend_from_slice(&[30, 41, 59, 240]);
             } else {
-                rgba.extend_from_slice(&[0, 0, 0, 0]); // Transparent
+                rgba.extend_from_slice(&[0, 0, 0, 0]);
             }
         }
     }
@@ -99,15 +143,11 @@ fn create_default_tray_icon() -> Icon {
 fn open_in_system_editor(path: &std::path::Path) {
     #[cfg(target_os = "windows")]
     {
-        let _ = std::process::Command::new("explorer")
-            .arg(path)
-            .spawn();
+        let _ = std::process::Command::new("explorer").arg(path).spawn();
     }
     #[cfg(target_os = "linux")]
     {
-        let _ = std::process::Command::new("xdg-open")
-            .arg(path)
-            .spawn();
+        let _ = std::process::Command::new("xdg-open").arg(path).spawn();
     }
 }
 
@@ -131,6 +171,10 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
             "--list-gestures" => {
                 print_gestures();
+                return Ok(());
+            }
+            "--list-actions" => {
+                print_actions();
                 return Ok(());
             }
             "-c" | "--config" => {
@@ -162,37 +206,24 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         i += 1;
     }
 
-    log::info!(
-        "Starting Laptop Touchpad Gesture Manager v{}...",
-        env!("CARGO_PKG_VERSION")
-    );
+    log::info!("Starting Laptop Touchpad Gesture Manager v{}...", env!("CARGO_PKG_VERSION"));
 
-    // Load initial configuration
     let mut config = Config::load_or_create(&config_path)?;
-    log::info!(
-        "Loaded {} gesture mappings from {}",
-        config.gestures.len(),
-        config_path.display()
-    );
-
-    // Initialize Action Executor
     let executor = ActionExecutor::new()?;
 
-    // Set up hot-reload config watcher
     let (config_tx, config_rx) = crossbeam_channel::unbounded::<Config>();
     let _watcher_handle = Config::spawn_watcher(config_path.clone(), config_tx)?;
 
-    // Set up cross-platform gesture backend
     let (gesture_tx, gesture_rx) = crossbeam_channel::unbounded::<Gesture>();
     let mut backend = create_backend();
     backend.start(gesture_tx)?;
 
-    // Set up System Tray (unless in headless mode)
     let is_paused = Arc::new(AtomicBool::new(false));
     let mut _tray_icon: Option<TrayIcon> = None;
     let reload_item_id: MenuId;
     let pause_item_id: MenuId;
     let open_config_id: MenuId;
+    let toggle_two_finger_id: MenuId;
     let quit_item_id: MenuId;
 
     if !headless {
@@ -201,17 +232,28 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let title_item = MenuItem::new("Touchpad Gestures", false, None);
         let reload_item = MenuItem::new("Reload Configuration", true, None);
         let pause_item = MenuItem::new("Pause Gestures", true, None);
+        let toggle_two_finger_item = MenuItem::new(
+            if config.sensitivity.two_finger_swipes_enabled {
+                "2-Finger Swipes: Enabled"
+            } else {
+                "2-Finger Swipes: Disabled"
+            },
+            true,
+            None,
+        );
         let open_config_item = MenuItem::new("Open Config File", true, None);
         let quit_item = MenuItem::new("Quit", true, None);
 
         reload_item_id = reload_item.id().clone();
         pause_item_id = pause_item.id().clone();
+        toggle_two_finger_id = toggle_two_finger_item.id().clone();
         open_config_id = open_config_item.id().clone();
         quit_item_id = quit_item.id().clone();
 
         let _ = menu.append(&title_item);
         let _ = menu.append(&PredefinedMenuItem::separator());
         let _ = menu.append(&pause_item);
+        let _ = menu.append(&toggle_two_finger_item);
         let _ = menu.append(&reload_item);
         let _ = menu.append(&open_config_item);
         let _ = menu.append(&PredefinedMenuItem::separator());
@@ -229,12 +271,13 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 log::info!("System tray icon initialized.");
             }
             Err(e) => {
-                log::warn!("System tray icon could not be created (headless environment?): {}. Continuing in headless mode.", e);
+                log::warn!("System tray icon could not be created: {}. Continuing in headless mode.", e);
             }
         }
     } else {
         reload_item_id = MenuId::new("reload");
         pause_item_id = MenuId::new("pause");
+        toggle_two_finger_id = MenuId::new("two_finger");
         open_config_id = MenuId::new("open_config");
         quit_item_id = MenuId::new("quit");
     }
@@ -243,10 +286,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut last_trigger = Instant::now() - Duration::from_secs(10);
     let mut running = true;
 
-    log::info!("Gesture Manager daemon is active and listening for multi-touch gestures...");
-
     while running {
-        // 1. Process Windows message loop events (required for tray icon on Windows)
         #[cfg(target_os = "windows")]
         unsafe {
             use windows::Win32::Foundation::HWND;
@@ -260,7 +300,6 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         }
 
-        // 2. Check for menu events from system tray
         while let Ok(event) = menu_channel.try_recv() {
             if event.id == quit_item_id {
                 log::info!("Quit requested via tray menu. Terminating...");
@@ -279,18 +318,23 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 let new_state = !currently_paused;
                 is_paused.store(new_state, Ordering::SeqCst);
                 if new_state {
-                    log::info!("Gestures paused by user.");
                     if let Some(tray) = &_tray_icon {
                         let _ = tray.set_tooltip(Some("Touchpad Gesture Manager (Paused)"));
                     }
+                    log::info!("Gestures paused.");
                 } else {
-                    log::info!("Gestures resumed by user.");
                     if let Some(tray) = &_tray_icon {
                         let _ = tray.set_tooltip(Some("Touchpad Gesture Manager (Active)"));
                     }
+                    log::info!("Gestures resumed.");
                 }
+            } else if event.id == toggle_two_finger_id {
+                config.sensitivity.two_finger_swipes_enabled = !config.sensitivity.two_finger_swipes_enabled;
+                log::info!(
+                    "Two-finger swipes enabled: {}",
+                    config.sensitivity.two_finger_swipes_enabled
+                );
             } else if event.id == open_config_id {
-                log::info!("Opening config file in default editor: {}", config_path.display());
                 open_in_system_editor(&config_path);
             }
         }
@@ -299,28 +343,19 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             break;
         }
 
-        // 3. Check for hot-reloaded configuration from watcher
         while let Ok(reloaded) = config_rx.try_recv() {
             config = reloaded;
             log::info!("Applied hot-reloaded configuration ({} bindings).", config.gestures.len());
         }
 
-        // 4. Process incoming gestures from input backend
         while let Ok(gesture) = gesture_rx.try_recv() {
             if is_paused.load(Ordering::SeqCst) {
-                log::debug!("Gesture '{}' ignored because daemon is paused.", gesture);
                 continue;
             }
 
             let now = Instant::now();
             let elapsed_ms = now.duration_since(last_trigger).as_millis() as u64;
             if elapsed_ms < config.gesture_cooldown_ms {
-                log::debug!(
-                    "Gesture '{}' throttled by debounce ({}ms < {}ms).",
-                    gesture,
-                    elapsed_ms,
-                    config.gesture_cooldown_ms
-                );
                 continue;
             }
 
@@ -328,19 +363,13 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 log::info!("Triggered gesture: {} -> executing action", gesture);
                 executor.execute(action);
                 last_trigger = now;
-            } else {
-                log::debug!("Gesture '{}' triggered but has no action mapped in config.", gesture);
             }
         }
 
-        // Yield CPU and prevent busy-spinning
         std::thread::sleep(Duration::from_millis(15));
     }
 
-    // Clean shutdown
-    log::info!("Shutting down gesture capture backend...");
     backend.stop()?;
     log::info!("Gesture Manager daemon stopped cleanly.");
-
     Ok(())
 }

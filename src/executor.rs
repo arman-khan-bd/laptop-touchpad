@@ -1,4 +1,4 @@
-//! Keystroke synthesis and shell command executor.
+//! Keystroke synthesis, built-in action remapping, and shell command executor.
 
 use crate::config::ActionConfig;
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
@@ -19,48 +19,160 @@ impl ActionExecutor {
         })
     }
 
-    /// Execute an action mapping (hotkey, command, or both).
+    /// Execute an action mapping (built-in action, hotkey, shell command, or combined).
     pub fn execute(&self, action: &ActionConfig) {
         if let Some(cmd) = action.command() {
             let cmd_str = cmd.to_string();
             thread::Builder::new()
                 .name("cmd-executor".into())
                 .spawn(move || {
-                    log::info!("Executing shell command: {}", cmd_str);
                     #[cfg(target_os = "windows")]
-                    let res = std::process::Command::new("cmd")
-                        .args(["/C", &cmd_str])
-                        .output();
+                    let res = std::process::Command::new("cmd").args(["/C", &cmd_str]).output();
 
                     #[cfg(not(target_os = "windows"))]
-                    let res = std::process::Command::new("sh")
-                        .args(["-c", &cmd_str])
-                        .output();
+                    let res = std::process::Command::new("sh").args(["-c", &cmd_str]).output();
 
-                    match res {
-                        Ok(output) => {
-                            if !output.status.success() {
-                                log::warn!(
-                                    "Command '{}' exited with status {}: {}",
-                                    cmd_str,
-                                    output.status,
-                                    String::from_utf8_lossy(&output.stderr)
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            log::error!("Failed to execute command '{}': {}", cmd_str, e);
-                        }
+                    if let Err(e) = res {
+                        log::error!("Failed to execute command '{}': {}", cmd_str, e);
                     }
                 })
                 .ok();
         }
 
-        if let Some(hotkey_str) = action.hotkey() {
-            if let Err(e) = self.send_hotkey(hotkey_str) {
-                log::error!("Failed to simulate hotkey '{}': {}", hotkey_str, e);
+        if let Some(hotkey_or_action) = action.hotkey() {
+            if self.execute_named_action(hotkey_or_action) {
+                return;
+            }
+
+            if let Err(e) = self.send_hotkey(hotkey_or_action) {
+                log::error!("Failed to simulate hotkey '{}': {}", hotkey_or_action, e);
             }
         }
+    }
+
+    /// Check and execute high-level semantic named actions.
+    fn execute_named_action(&self, action_name: &str) -> bool {
+        let normalized = action_name.trim().to_lowercase();
+        match normalized.as_str() {
+            // Volume and audio controls
+            "volume_up" | "vol_up" => {
+                let _ = self.send_single_key(Key::VolumeUp);
+                true
+            }
+            "volume_down" | "vol_down" => {
+                let _ = self.send_single_key(Key::VolumeDown);
+                true
+            }
+            "volume_mute" | "mute" => {
+                let _ = self.send_single_key(Key::VolumeMute);
+                true
+            }
+
+            // Media playback controls
+            "media_play_pause" | "play_pause" => {
+                let _ = self.send_single_key(Key::MediaPlayPause);
+                true
+            }
+            "media_next" | "next_track" => {
+                let _ = self.send_single_key(Key::MediaNextTrack);
+                true
+            }
+            "media_prev" | "prev_track" => {
+                let _ = self.send_single_key(Key::MediaPrevTrack);
+                true
+            }
+
+            // Window and desktop management
+            "task_view" | "overview" => {
+                let _ = self.send_hotkey("Super+Tab");
+                true
+            }
+            "show_desktop" => {
+                let _ = self.send_hotkey("Super+D");
+                true
+            }
+            "app_launcher" | "start_menu" => {
+                let _ = self.send_hotkey("Super");
+                true
+            }
+            "snap_left" => {
+                let _ = self.send_hotkey("Super+Left");
+                true
+            }
+            "snap_right" => {
+                let _ = self.send_hotkey("Super+Right");
+                true
+            }
+            "maximize" => {
+                let _ = self.send_hotkey("Super+Up");
+                true
+            }
+            "minimize" => {
+                let _ = self.send_hotkey("Super+Down");
+                true
+            }
+            "desktop_left" => {
+                let _ = self.send_hotkey("Ctrl+Super+Left");
+                true
+            }
+            "desktop_right" => {
+                let _ = self.send_hotkey("Ctrl+Super+Right");
+                true
+            }
+            "close_window" => {
+                #[cfg(target_os = "windows")]
+                let _ = self.send_hotkey("Alt+F4");
+                #[cfg(not(target_os = "windows"))]
+                let _ = self.send_hotkey("Ctrl+Q");
+                true
+            }
+
+            // Browser navigation
+            "browser_back" => {
+                let _ = self.send_hotkey("Alt+Left");
+                true
+            }
+            "browser_forward" => {
+                let _ = self.send_hotkey("Alt+Right");
+                true
+            }
+            "browser_refresh" => {
+                let _ = self.send_hotkey("Ctrl+R");
+                true
+            }
+            "browser_new_tab" => {
+                let _ = self.send_hotkey("Ctrl+T");
+                true
+            }
+            "browser_close_tab" => {
+                let _ = self.send_hotkey("Ctrl+W");
+                true
+            }
+            "browser_reopen_tab" => {
+                let _ = self.send_hotkey("Ctrl+Shift+T");
+                true
+            }
+            "zoom_in" => {
+                let _ = self.send_hotkey("Ctrl+Plus");
+                true
+            }
+            "zoom_out" => {
+                let _ = self.send_hotkey("Ctrl+Minus");
+                true
+            }
+            "zoom_reset" => {
+                let _ = self.send_hotkey("Ctrl+0");
+                true
+            }
+
+            _ => false,
+        }
+    }
+
+    fn send_single_key(&self, key: Key) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let mut enigo = self.enigo.lock().map_err(|_| "Enigo lock poisoned")?;
+        enigo.key(key, Direction::Click).map_err(|e| format!("{:?}", e))?;
+        Ok(())
     }
 
     /// Simulate a multi-key shortcut (e.g., "Ctrl+Alt+Delete", "Super+Tab", "Ctrl+Plus").
@@ -79,7 +191,7 @@ impl ActionExecutor {
                 "ctrl" | "control" => modifiers.push(Key::Control),
                 "alt" | "option" => modifiers.push(Key::Alt),
                 "shift" => modifiers.push(Key::Shift),
-                "super" | "win" | "meta" | "windows" | "cmd" | "command" => modifiers.push(Key::Meta),
+                "super" | "win" | "meta" | "windows" | "cmd" => modifiers.push(Key::Meta),
                 _ => {
                     let key = parse_single_key(token)?;
                     base_keys.push(key);
@@ -89,39 +201,28 @@ impl ActionExecutor {
 
         let mut enigo = self.enigo.lock().map_err(|_| "Enigo lock poisoned")?;
 
-        // 1. Press modifier keys in order
         for &m in &modifiers {
-            enigo.key(m, Direction::Press)
-                .map_err(|e| format!("Enigo modifier press error: {:?}", e))?;
+            enigo.key(m, Direction::Press).map_err(|e| format!("{:?}", e))?;
         }
 
         if !modifiers.is_empty() {
             thread::sleep(Duration::from_millis(15));
         }
 
-        // 2. Click base keys (or press and release if no base key was present, e.g. solo "Super")
-        if base_keys.is_empty() {
-            // Hotkey consisted solely of modifiers (e.g., solo "Super" to open App Launcher)
-            // Just releasing will register the key release
-        } else {
-            for &k in &base_keys {
-                enigo.key(k, Direction::Click)
-                    .map_err(|e| format!("Enigo key click error: {:?}", e))?;
-                thread::sleep(Duration::from_millis(10));
-            }
+        for &k in &base_keys {
+            enigo.key(k, Direction::Click).map_err(|e| format!("{:?}", e))?;
+            thread::sleep(Duration::from_millis(10));
         }
 
         if !modifiers.is_empty() {
             thread::sleep(Duration::from_millis(15));
         }
 
-        // 3. Release modifier keys in reverse order
         for &m in modifiers.iter().rev() {
-            enigo.key(m, Direction::Release)
-                .map_err(|e| format!("Enigo modifier release error: {:?}", e))?;
+            enigo.key(m, Direction::Release).map_err(|e| format!("{:?}", e))?;
         }
 
-        log::info!("Simulated hotkey: {}", hotkey);
+        log::info!("Executed hotkey action: {}", hotkey);
         Ok(())
     }
 }
@@ -143,6 +244,12 @@ fn parse_single_key(token: &str) -> Result<Key, Box<dyn std::error::Error + Send
         "pagedown" | "pgdn" => Key::PageDown,
         "home" => Key::Home,
         "end" => Key::End,
+        "volumeup" | "vol_up" => Key::VolumeUp,
+        "volumedown" | "vol_down" => Key::VolumeDown,
+        "volumemute" | "mute" => Key::VolumeMute,
+        "mediaplaypause" | "playpause" => Key::MediaPlayPause,
+        "medianexttrack" | "nexttrack" | "medianext" => Key::MediaNextTrack,
+        "mediaprevtrack" | "prevtrack" | "mediaprev" => Key::MediaPrevTrack,
         "f1" => Key::F1,
         "f2" => Key::F2,
         "f3" => Key::F3,
@@ -163,7 +270,7 @@ fn parse_single_key(token: &str) -> Result<Key, Box<dyn std::error::Error + Send
                 if chars.next().is_none() {
                     Key::Unicode(c)
                 } else {
-                    return Err(format!("Unrecognized key token '{}'", token).into());
+                    return Err(format!("Unrecognized key '{}'", token).into());
                 }
             } else {
                 return Err("Empty key token".into());
