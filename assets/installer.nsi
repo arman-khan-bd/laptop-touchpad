@@ -15,10 +15,8 @@ RequestExecutionLevel user ; Runs without UAC elevation prompt
 
 ; Modern UI Appearance
 !define MUI_ABORTWARNING
-!ifFileExists "icon.ico"
-  !define MUI_ICON "icon.ico"
-  !define MUI_UNICON "icon.ico"
-!endif
+!define MUI_ICON "icon.ico"
+!define MUI_UNICON "icon.ico"
 
 ; Installer Pages (Step-by-Step Wizard)
 ; Step 1: Welcome Page

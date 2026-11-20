@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 //! Laptop Touchpad Gesture Manager & Remapper
 //! Main entry point, system tray daemon, and event dispatcher.
 
@@ -157,6 +159,15 @@ fn open_in_system_editor(path: &std::path::Path) {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn AttachConsole(dw_process_id: u32) -> i32;
+        }
+        AttachConsole(0xFFFFFFFF);
+    }
+
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let args: Vec<String> = env::args().collect();
