@@ -47,7 +47,7 @@ A lightweight, background touchpad gesture manager and remapper for Linux laptop
 Intercepts raw multi-touch gestures (3-finger and 4-finger swipes, pinches, taps) \
 via libinput/udev without requiring compositor lock-in, and maps them to customizable \
 actions such as keyboard shortcuts and shell scripts."""
-depends = "$auto, libinput10, libudev1"
+depends = "$auto"
 section = "utils"
 priority = "optional"
 assets = [

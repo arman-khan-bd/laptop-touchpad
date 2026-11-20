@@ -51,7 +51,9 @@ jobs:
 
       - name: Package Red Hat (.rpm)
         run: |
-          cargo generate-rpm --output dist/
+          cargo generate-rpm
+          mkdir -p dist
+          cp target/generate-rpm/*.rpm dist/
           ls -la dist/
 
       - name: Upload Linux artifacts
@@ -164,7 +166,10 @@ jobs:
   publish-release:
     name: Publish Release Assets
     needs: [build-linux, build-windows]
+    if: always() && !cancelled() && (needs.build-linux.result == 'success' || needs.build-windows.result == 'success')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -173,22 +178,38 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+          merge-multiple: true
 
       - name: Stage release assets
         run: |
           mkdir -p release-files
-          # Flatten all artifacts into release-files regardless of download subfolder layout
-          find artifacts -type f -exec cp -v {} release-files/ \;
-          echo "=== Files staged for GitHub Release ==="
+          if [ -d "artifacts" ]; then
+            find artifacts -type f -exec cp -v {} release-files/ \;
+          fi
+          echo "=== Staged Release Files ==="
           ls -la release-files/
 
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          files: release-files/*
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+      - name: Publish to GitHub Release via GitHub CLI
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.tag_name || github.ref_name }}"
+          if [ -z "$TAG" ] || [ "$TAG" = "main" ] || [ "$TAG" = "master" ]; then
+            TAG="v0.1.0"
+          fi
+          echo "Target Release Tag: $TAG"
+
+          if ! ls release-files/* > /dev/null 2>&1; then
+            echo "Error: No release files found in release-files directory!"
+            exit 1
+          fi
+
+          # If release exists, upload assets with clobber; otherwise create new release
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release $TAG already exists on GitHub. Uploading/updating assets..."
+            gh release upload "$TAG" release-files/* --clobber
+          else
+            echo "Creating new release $TAG on GitHub..."
+            gh release create "$TAG" release-files/* --title "Release $TAG" --generate-notes
+          fi
+          echo "Release successfully published!"

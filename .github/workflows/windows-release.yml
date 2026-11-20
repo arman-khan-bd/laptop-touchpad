@@ -127,16 +127,32 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-      - name: Publish to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          name: Release ${{ github.event.inputs.tag_name || github.ref_name }}
-          files: |
-            dist/*.exe
-            dist/*.zip
-          generate_release_notes: true
-          draft: ${{ github.event.inputs.draft == 'true' }}
-          prerelease: false
+      - name: Publish to GitHub Release via GitHub CLI
+        shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.event.inputs.tag_name || github.ref_name }}"
+          if (-not $tag -or $tag -eq "main" -or $tag -eq "master") {
+            $tag = "v0.1.0"
+          }
+          Write-Host "Publishing to Release Tag: $tag"
+
+          $files = Get-ChildItem -Path dist/* -Include *.exe,*.zip | Select-Object -ExpandProperty FullName
+          Write-Host "Files to release:"
+          $files | ForEach-Object { Write-Host " - $_" }
+
+          $exists = $false
+          try {
+            gh release view $tag
+            if ($LASTEXITCODE -eq 0) { $exists = $true }
+          } catch {}
+
+          if ($exists) {
+            Write-Host "Release $tag already exists on GitHub. Uploading/clobbering assets..."
+            gh release upload $tag $files --clobber
+          } else {
+            Write-Host "Creating new release $tag on GitHub..."
+            gh release create $tag $files --title "Release $tag" --generate-notes
+          }
+          Write-Host "Windows release successfully published!"
