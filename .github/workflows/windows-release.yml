@@ -48,13 +48,23 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target x86_64-pc-windows-msvc
 
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue) -and -not (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
+            Write-Host "Installing NSIS via Chocolatey..."
+            choco install nsis -y --no-progress
+          }
+          if (Test-Path "C:\Program Files (x86)\NSIS") {
+            "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+
       - name: Stage Windows distribution artifacts
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist
           New-Item -ItemType Directory -Force -Path dist/bundle
 
-          # Check candidate binary locations
           $candidates = @(
             "target/x86_64-pc-windows-msvc/release/gesture-manager.exe",
             "target/release/gesture-manager.exe"
@@ -75,28 +85,36 @@ jobs:
 
           Write-Host "Found compiled executable at: $binPath"
 
-          # 1. Standalone executable files
+          # 1. Standalone executable copies
           Copy-Item $binPath "dist/gesture-manager.exe"
           Copy-Item $binPath "dist/gesture-manager-windows-x86_64.exe"
 
-          # 2. Prepare portable zip distribution bundle
+          # 2. Compile NSIS Step-by-Step Setup Wizard Installer if makensis is available
+          $makensis = $null
+          if (Get-Command makensis -ErrorAction SilentlyContinue) {
+            $makensis = "makensis"
+          } elseif (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe") {
+            $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          }
+
+          if ($makensis) {
+            Write-Host "Building NSIS step-by-step installer..."
+            & $makensis assets/installer.nsi
+          }
+
+          # 3. Prepare portable zip distribution bundle
           Copy-Item $binPath "dist/bundle/gesture-manager.exe"
           if (Test-Path "README.md") {
             Copy-Item "README.md" "dist/bundle/"
           }
 
-          # Create run and autostart batch helpers
           Set-Content -Path "dist/bundle/start-gesture-manager.bat" -Value "@echo off`r`nstart """" ""%~dp0gesture-manager.exe"""
+          Set-Content -Path "dist/bundle/open-config-gui.bat" -Value "@echo off`r`nstart """" ""%~dp0gesture-manager.exe"" --gui"
           Set-Content -Path "dist/bundle/add-to-startup.bat" -Value "@echo off`r`npowershell -Command ""`$s=(New-Object -COM WScript.Shell).CreateShortcut('`$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\gesture-manager.lnk');`$s.TargetPath='%~dp0gesture-manager.exe';`$s.Save()""`r`necho Touchpad Gesture Manager added to Windows Startup."
           Set-Content -Path "dist/bundle/remove-from-startup.bat" -Value "@echo off`r`ndel /f /q ""%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\gesture-manager.lnk""`r`necho Touchpad Gesture Manager removed from Windows Startup."
 
-          # Generate sample config via self-check
           & "dist/gesture-manager.exe" --no-tray --check-config
-
-          # Create zip archive
           Compress-Archive -Path dist/bundle/* -DestinationPath dist/gesture-manager-windows-x86_64.zip -Force
-
-          # Clean up temporary bundle directory
           Remove-Item -Recurse -Force dist/bundle
 
           Write-Host "=== Output Release Files ==="
@@ -115,9 +133,8 @@ jobs:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
           name: Release ${{ github.event.inputs.tag_name || github.ref_name }}
           files: |
-            dist/gesture-manager.exe
-            dist/gesture-manager-windows-x86_64.exe
-            dist/gesture-manager-windows-x86_64.zip
+            dist/*.exe
+            dist/*.zip
           generate_release_notes: true
           draft: ${{ github.event.inputs.draft == 'true' }}
           prerelease: false

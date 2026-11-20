@@ -5,11 +5,13 @@ mod backend;
 mod config;
 mod executor;
 mod gesture;
+mod gui;
 
 use backend::create_backend;
 use config::Config;
 use executor::ActionExecutor;
 use gesture::Gesture;
+use gui::GuiServer;
 use std::env;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,6 +28,8 @@ USAGE:
     gesture-manager [OPTIONS]
 
 OPTIONS:
+        --gui              Launch the Advanced Graphical User Interface in browser
+        --install          Run the Step-by-Step Installation Wizard
     -c, --config <PATH>    Path to custom configuration file
         --no-tray          Run in headless mode without system tray icon
         --check-config     Validate the configuration file syntax and exit
@@ -37,6 +41,7 @@ OPTIONS:
 CONFIGURATION:
     Default location: ~/.config/gesture-manager/config.toml (Linux)
                       %APPDATA%\gesture-manager\config.toml (Windows)
+    GUI Web Interface: http://127.0.0.1:17890/
 "#,
         version = env!("CARGO_PKG_VERSION")
     );
@@ -157,6 +162,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args: Vec<String> = env::args().collect();
     let mut config_path = Config::default_path();
     let mut headless = false;
+    let mut open_gui_on_launch = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -176,6 +182,12 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             "--list-actions" => {
                 print_actions();
                 return Ok(());
+            }
+            "--gui" => {
+                open_gui_on_launch = true;
+            }
+            "--install" => {
+                open_gui_on_launch = true;
             }
             "-c" | "--config" => {
                 if i + 1 < args.len() {
@@ -211,6 +223,14 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut config = Config::load_or_create(&config_path)?;
     let executor = ActionExecutor::new()?;
 
+    // Start background GUI configurator web server
+    let gui_server = GuiServer::new(config_path.clone());
+    if let Err(e) = gui_server.start() {
+        log::warn!("Could not bind GUI server: {}. Continuing without local GUI server.", e);
+    } else if open_gui_on_launch {
+        GuiServer::open_browser();
+    }
+
     let (config_tx, config_rx) = crossbeam_channel::unbounded::<Config>();
     let _watcher_handle = Config::spawn_watcher(config_path.clone(), config_tx)?;
 
@@ -220,6 +240,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let is_paused = Arc::new(AtomicBool::new(false));
     let mut _tray_icon: Option<TrayIcon> = None;
+    let open_gui_id: MenuId;
     let reload_item_id: MenuId;
     let pause_item_id: MenuId;
     let open_config_id: MenuId;
@@ -230,6 +251,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let menu = Menu::new();
 
         let title_item = MenuItem::new("Touchpad Gestures", false, None);
+        let open_gui_item = MenuItem::new("⚙ Open Gesture Configurator GUI", true, None);
         let reload_item = MenuItem::new("Reload Configuration", true, None);
         let pause_item = MenuItem::new("Pause Gestures", true, None);
         let toggle_two_finger_item = MenuItem::new(
@@ -241,9 +263,10 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             true,
             None,
         );
-        let open_config_item = MenuItem::new("Open Config File", true, None);
+        let open_config_item = MenuItem::new("Open Config File (TOML)", true, None);
         let quit_item = MenuItem::new("Quit", true, None);
 
+        open_gui_id = open_gui_item.id().clone();
         reload_item_id = reload_item.id().clone();
         pause_item_id = pause_item.id().clone();
         toggle_two_finger_id = toggle_two_finger_item.id().clone();
@@ -251,6 +274,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         quit_item_id = quit_item.id().clone();
 
         let _ = menu.append(&title_item);
+        let _ = menu.append(&PredefinedMenuItem::separator());
+        let _ = menu.append(&open_gui_item);
         let _ = menu.append(&PredefinedMenuItem::separator());
         let _ = menu.append(&pause_item);
         let _ = menu.append(&toggle_two_finger_item);
@@ -275,6 +300,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         }
     } else {
+        open_gui_id = MenuId::new("open_gui");
         reload_item_id = MenuId::new("reload");
         pause_item_id = MenuId::new("pause");
         toggle_two_finger_id = MenuId::new("two_finger");
@@ -305,6 +331,9 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 log::info!("Quit requested via tray menu. Terminating...");
                 running = false;
                 break;
+            } else if event.id == open_gui_id {
+                log::info!("Opening Gesture Configurator GUI in web browser...");
+                GuiServer::open_browser();
             } else if event.id == reload_item_id {
                 match Config::load_or_create(&config_path) {
                     Ok(reloaded) => {

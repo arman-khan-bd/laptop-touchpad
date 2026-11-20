@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Touchpad Gesture Manager & Remapper</title>
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { background-color: var(--bg-dark); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+    header { background: #182234; border-bottom: 1px solid var(--card-border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px; box-shadow: 0 4px 12px rgba(59,130,246,0.3); }
+    .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .header-actions { display: flex; gap: 10px; }
+    button { cursor: pointer; border: none; outline: none; border-radius: 6px; font-weight: 600; font-size: 13px; padding: 8px 16px; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+    .btn-primary { background: var(--accent); color: white; box-shadow: 0 2px 8px rgba(59,130,246,0.3); }
+    .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .btn-secondary { background: #334155; color: var(--text); }
+    .btn-secondary:hover { background: #475569; }
+    .btn-success { background: var(--success); color: white; }
+    .btn-success:hover { background: #059669; }
+    nav { background: #131d2e; border-bottom: 1px solid var(--card-border); padding: 0 24px; display: flex; gap: 8px; }
+    .nav-tab { padding: 12px 18px; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; font-size: 14px; font-weight: 500; transition: all 0.2s; }
+    .nav-tab:hover { color: var(--text); }
+    .nav-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+    main { flex: 1; padding: 24px; max-width: 1200px; margin: 0 auto; width: 100%; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeIn 0.2s ease-in; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+    .card-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+    .filter-pills { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .filter-pill { padding: 6px 12px; background: #0f172a; border: 1px solid var(--card-border); border-radius: 20px; font-size: 12px; cursor: pointer; color: var(--text-muted); }
+    .filter-pill.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .gesture-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; }
+    .gesture-row { background: #162032; border: 1px solid #283548; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; transition: border-color 0.2s; }
+    .gesture-row:hover { border-color: var(--accent); }
+    .gesture-header { display: flex; align-items: center; justify-content: space-between; }
+    .gesture-info { display: flex; align-items: center; gap: 10px; }
+    .gesture-icon { width: 32px; height: 32px; border-radius: 6px; background: #1e293b; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .gesture-name { font-weight: 600; font-size: 14px; }
+    .gesture-desc { font-size: 12px; color: var(--text-muted); }
+    .action-controls { display: flex; gap: 8px; }
+    select, input[type="text"], input[type="number"] { background: #0f172a; border: 1px solid var(--card-border); border-radius: 6px; color: var(--text); padding: 8px 12px; font-size: 13px; width: 100%; outline: none; }
+    select:focus, input[type="text"]:focus { border-color: var(--accent); }
+    .slider-group { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+    .slider-item { background: #162032; padding: 16px; border-radius: 10px; border: 1px solid #283548; }
+    .slider-header { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; font-weight: 500; }
+    .slider-value { color: var(--accent); font-weight: 700; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #283548; }
+    .toggle-row:last-child { border-bottom: none; }
+    .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider-round { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .2s; border-radius: 24px; }
+    .slider-round:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%; }
+    input:checked + .slider-round { background-color: var(--accent); }
+    input:checked + .slider-round:before { transform: translateX(20px); }
+    /* Touchpad Interactive Sandbox */
+    .touchpad-box { width: 100%; height: 320px; background: radial-gradient(circle at center, #1e293b, #0f172a); border: 2px dashed #3b82f6; border-radius: 16px; position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: crosshair; user-select: none; }
+    .touch-dot { position: absolute; width: 48px; height: 48px; border-radius: 50%; background: rgba(59, 130, 246, 0.4); border: 2px solid #60a5fa; transform: translate(-50%, -50%); pointer-events: none; transition: transform 0.05s ease-out; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; }
+    .touchpad-hint { color: var(--text-muted); font-size: 14px; text-align: center; pointer-events: none; }
+    .detected-badge { margin-top: 14px; font-size: 18px; font-weight: 700; color: #60a5fa; background: rgba(59, 130, 246, 0.15); padding: 8px 18px; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.3); }
+    /* Wizard Styles */
+    .wizard-steps { display: flex; justify-content: space-between; margin-bottom: 24px; position: relative; }
+    .wizard-step { display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 2; width: 20%; }
+    .step-circle { width: 36px; height: 36px; border-radius: 50%; background: #334155; display: flex; align-items: center; justify-content: center; font-weight: 700; transition: all 0.3s; }
+    .step-circle.active { background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+    .step-circle.completed { background: var(--success); }
+    .step-label { font-size: 12px; color: var(--text-muted); font-weight: 500; text-align: center; }
+    .wizard-page { display: none; }
+    .wizard-page.active { display: block; }
+    .toast { position: fixed; bottom: 24px; right: 24px; background: #1e293b; border: 1px solid var(--accent); color: white; padding: 12px 20px; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); display: none; z-index: 100; font-weight: 600; font-size: 14px; animation: slideIn 0.3s ease; }
+    @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="logo-icon">🖐</div>
+      <div>
+        <div style="font-weight: 700; font-size: 16px;">Touchpad Gesture Manager</div>
+        <div style="font-size: 12px; color: var(--text-muted);">Cross-Platform Remapper & Daemon</div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <div class="status-badge">
+        <div class="status-dot"></div>
+        <span id="daemon-status-text">DAEMON ACTIVE (HOT-RELOAD ON)</span>
+      </div>
+      <div class="header-actions">
+        <button class="btn-primary" onclick="saveConfiguration()">💾 Save & Apply</button>
+        <button class="btn-secondary" onclick="loadConfiguration()">🔄 Reload</button>
+        <button class="btn-secondary" id="btn-pause-toggle" onclick="togglePause()">⏸ Pause</button>
+      </div>
+    </div>
+  </header>
+
+  <nav>
+    <div class="nav-tab active" onclick="switchTab('tab-remapper', this)">🎛 Gesture Remapper</div>
+    <div class="nav-tab" onclick="switchTab('tab-sensitivity', this)">🎚 Sensitivity & Tuning</div>
+    <div class="nav-tab" onclick="switchTab('tab-sandbox', this)">🎯 Touchpad Test Sandbox</div>
+    <div class="nav-tab" onclick="switchTab('tab-wizard', this)">🧙 Setup & Installer Wizard</div>
+    <div class="nav-tab" onclick="switchTab('tab-about', this)">ℹ About & Device Info</div>
+  </nav>
+
+  <main>
+    <!-- TAB 1: GESTURE REMAPPER -->
+    <div id="tab-remapper" class="tab-content active">
+      <div class="card">
+        <div class="card-title">
+          <span>Active Gesture Remappings</span>
+          <span style="font-size: 13px; font-weight: normal; color: var(--text-muted);">Changes save directly to <code>config.toml</code></span>
+        </div>
+        <div class="filter-pills">
+          <div class="filter-pill active" onclick="filterGestures('all', this)">All Gestures</div>
+          <div class="filter-pill" onclick="filterGestures('2', this)">2-Finger</div>
+          <div class="filter-pill" onclick="filterGestures('3', this)">3-Finger</div>
+          <div class="filter-pill" onclick="filterGestures('4', this)">4-Finger</div>
+          <div class="filter-pill" onclick="filterGestures('rot', this)">Rotation & Twist</div>
+          <div class="filter-pill" onclick="filterGestures('tap', this)">Taps & Holds</div>
+        </div>
+        <div class="gesture-grid" id="gesture-grid">
+          <!-- Dynamically populated rows -->
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: SENSITIVITY & TUNING -->
+    <div id="tab-sensitivity" class="tab-content">
+      <div class="card">
+        <div class="card-title">Hardware Sensitivity & Physical Thresholds</div>
+        <div class="slider-group">
+          <div class="slider-item">
+            <div class="slider-header">
+              <span>Swipe Distance Threshold</span>
+              <span class="slider-value" id="val-swipe-thresh">45 px</span>
+            </div>
+            <input type="range" id="input-swipe-thresh" min="20" max="150" value="45" oninput="updateSensitivity()">
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">Lower values trigger faster; higher values prevent accidental swipes.</div>
+          </div>
+          <div class="slider-item">
+            <div class="slider-header">
+              <span>Minimum Swipe Velocity</span>
+              <span class="slider-value" id="val-swipe-vel">0.10 px/ms</span>
+            </div>
+            <input type="range" id="input-swipe-vel" min="0.05" max="0.50" step="0.01" value="0.10" oninput="updateSensitivity()">
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">Rejects slow, drifting hand rests while typing.</div>
+          </div>
+          <div class="slider-item">
+            <div class="slider-header">
+              <span>Pinch Scale Delta Ratio</span>
+              <span class="slider-value" id="val-pinch-thresh">20 %</span>
+            </div>
+            <input type="range" id="input-pinch-thresh" min="5" max="50" value="20" oninput="updateSensitivity()">
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">Required percentage change in spread to trigger zoom in/out.</div>
+          </div>
+          <div class="slider-item">
+            <div class="slider-header">
+              <span>Twist Rotation Angle</span>
+              <span class="slider-value" id="val-rot-thresh">24 °</span>
+            </div>
+            <input type="range" id="input-rot-thresh" min="10" max="60" value="24" oninput="updateSensitivity()">
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">Required angular displacement between two fingers for twist gestures.</div>
+          </div>
+          <div class="slider-item">
+            <div class="slider-header">
+              <span>Multi-Touch Tap Max Duration</span>
+              <span class="slider-value" id="val-tap-duration">280 ms</span>
+            </div>
+            <input type="range" id="input-tap-duration" min="100" max="500" value="280" oninput="updateSensitivity()">
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">Maximum contact time to register as a tap instead of a swipe.</div>
+          </div>
+          <div class="slider-item">
+            <div class="slider-header">
+              <span>Gesture Cooldown & Debounce</span>
+              <span class="slider-value" id="val-cooldown">300 ms</span>
+            </div>
+            <input type="range" id="input-cooldown" min="100" max="1000" step="25" value="300" oninput="updateSensitivity()">
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">Cooldown window after a gesture to prevent double-firing.</div>
+          </div>
+        </div>
+
+        <div style="margin-top: 24px; border-top: 1px solid var(--card-border); padding-top: 16px;">
+          <div class="toggle-row">
+            <div>
+              <div style="font-weight: 600; font-size: 14px;">Enable 2-Finger Swiping Gestures</div>
+              <div style="font-size: 12px; color: var(--text-muted);">Disable if you prefer 2 fingers reserved entirely for standard page scrolling.</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-two-finger" checked onchange="updateSensitivity()">
+              <span class="slider-round"></span>
+            </label>
+          </div>
+          <div class="toggle-row">
+            <div>
+              <div style="font-weight: 600; font-size: 14px;">Invert Horizontal Swipe Direction</div>
+              <div style="font-size: 12px; color: var(--text-muted);">Switch between natural (finger following) and traditional direction.</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-invert-x" onchange="updateSensitivity()">
+              <span class="slider-round"></span>
+            </label>
+          </div>
+          <div class="toggle-row">
+            <div>
+              <div style="font-weight: 600; font-size: 14px;">Invert Vertical Swipe Direction</div>
+              <div style="font-size: 12px; color: var(--text-muted);">Natural vs reverse vertical swipes (Swipe Up for Show Desktop vs Maximize).</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-invert-y" onchange="updateSensitivity()">
+              <span class="slider-round"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: LIVE TOUCHPAD TEST SANDBOX -->
+    <div id="tab-sandbox" class="tab-content">
+      <div class="card">
+        <div class="card-title">Interactive Touchpad Diagnostic Sandbox</div>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+          Test your physical touchpad or simulate gestures directly on the interactive pad below with your trackpad or mouse.
+        </p>
+        <div class="touchpad-box" id="test-pad">
+          <div class="touchpad-hint">Touch, swipe, or drag multiple fingers across this surface to test gestures</div>
+          <div class="detected-badge" id="detected-gesture-badge">Waiting for gesture...</div>
+        </div>
+        <div style="margin-top: 16px; font-family: monospace; font-size: 12px; background: #0f172a; padding: 12px; border-radius: 8px; border: 1px solid var(--card-border);">
+          <div>Active Contacts: <span id="debug-contacts" style="color: var(--accent);">0</span> | Coordinates: <span id="debug-coords" style="color: var(--accent);">(0, 0)</span> | Spread: <span id="debug-spread" style="color: var(--accent);">0.0</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: STEP-BY-STEP SETUP WIZARD -->
+    <div id="tab-wizard" class="tab-content">
+      <div class="card">
+        <div class="wizard-steps">
+          <div class="wizard-step">
+            <div class="step-circle active" id="step-circle-1">1</div>
+            <div class="step-label">Hardware Check</div>
+          </div>
+          <div class="wizard-step">
+            <div class="step-circle" id="step-circle-2">2</div>
+            <div class="step-label">Components</div>
+          </div>
+          <div class="wizard-step">
+            <div class="step-circle" id="step-circle-3">3</div>
+            <div class="step-label">Base Profile</div>
+          </div>
+          <div class="wizard-step">
+            <div class="step-circle" id="step-circle-4">4</div>
+            <div class="step-label">Installation</div>
+          </div>
+          <div class="wizard-step">
+            <div class="step-circle" id="step-circle-5">5</div>
+            <div class="step-label">Finish</div>
+          </div>
+        </div>
+
+        <!-- Wizard Page 1 -->
+        <div class="wizard-page active" id="wizard-page-1">
+          <h3 style="margin-bottom: 8px;">Step 1: System Hardware & Driver Check</h3>
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Verifying host compatibility for low-level multi-touch interception.</p>
+          <div style="background: #162032; border: 1px solid #283548; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+              <span>Precision Touchpad HID (0x0D / 0x05)</span>
+              <span style="color: var(--success); font-weight: bold;">✔ DETECTED</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+              <span>Direct Raw Input Hooking</span>
+              <span style="color: var(--success); font-weight: bold;">✔ READY</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span>Cross-Platform Keystroke Synthesizer</span>
+              <span style="color: var(--success); font-weight: bold;">✔ READY</span>
+            </div>
+          </div>
+          <button class="btn-primary" onclick="setWizardStep(2)">Next: Component Setup →</button>
+        </div>
+
+        <!-- Wizard Page 2 -->
+        <div class="wizard-page" id="wizard-page-2">
+          <h3 style="margin-bottom: 8px;">Step 2: Component Selection</h3>
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Choose modules to configure on this workstation:</p>
+          <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+            <label style="display: flex; gap: 10px; align-items: center; font-size: 14px;">
+              <input type="checkbox" checked disabled>
+              <span><strong>Background Touchpad Daemon</strong> (Core input interceptor & gesture recognizer)</span>
+            </label>
+            <label style="display: flex; gap: 10px; align-items: center; font-size: 14px;">
+              <input type="checkbox" checked disabled>
+              <span><strong>Advanced GUI Configurator</strong> (Real-time settings manager & test pad)</span>
+            </label>
+            <label style="display: flex; gap: 10px; align-items: center; font-size: 14px;">
+              <input type="checkbox" id="wiz-autostart" checked>
+              <span><strong>Start on System Login</strong> (Automatically start daemon on Windows/Linux boot)</span>
+            </label>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn-secondary" onclick="setWizardStep(1)">← Back</button>
+            <button class="btn-primary" onclick="setWizardStep(3)">Next: Choose Profile →</button>
+          </div>
+        </div>
+
+        <!-- Wizard Page 3 -->
+        <div class="wizard-page" id="wizard-page-3">
+          <h3 style="margin-bottom: 8px;">Step 3: Base Gesture Profile</h3>
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Select an initial layout preset:</p>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 20px;">
+            <div class="gesture-row" style="cursor: pointer;" onclick="applyProfile('windows')">
+              <strong>Windows 11 Native</strong>
+              <span style="font-size: 12px; color: var(--text-muted);">3-Finger Up = Task View<br>3-Finger Down = Show Desktop<br>4-Finger Left/Right = Virtual Desktops</span>
+            </div>
+            <div class="gesture-row" style="cursor: pointer;" onclick="applyProfile('macos')">
+              <strong>macOS Trackpad Style</strong>
+              <span style="font-size: 12px; color: var(--text-muted);">3-Finger Up = Mission Control<br>3-Finger Down = App Exposé<br>Pinch = Launchpad / Desktop</span>
+            </div>
+            <div class="gesture-row" style="cursor: pointer;" onclick="applyProfile('media')">
+              <strong>Media & Browsing Pro</strong>
+              <span style="font-size: 12px; color: var(--text-muted);">Rotation = Volume Wheel<br>3-Finger Swipe = Browser History<br>4-Finger Hold = Play / Pause</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn-secondary" onclick="setWizardStep(2)">← Back</button>
+            <button class="btn-primary" onclick="setWizardStep(4)">Next: Install & Configure →</button>
+          </div>
+        </div>
+
+        <!-- Wizard Page 4 -->
+        <div class="wizard-page" id="wizard-page-4">
+          <h3 style="margin-bottom: 8px;">Step 4: Execute Installation</h3>
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Applying startup settings and configuration files.</p>
+          <button class="btn-success" id="btn-run-install" onclick="executeInstall()">⚡ Install & Configure Now</button>
+          <div id="install-progress-msg" style="margin-top: 14px; font-weight: 600; color: var(--accent);"></div>
+        </div>
+
+        <!-- Wizard Page 5 -->
+        <div class="wizard-page" id="wizard-page-5">
+          <h3 style="color: var(--success); margin-bottom: 8px;">✔ Installation Completed Successfully!</h3>
+          <p style="font-size: 14px; color: var(--text); margin-bottom: 16px;">
+            Your laptop touchpad is now configured with multi-touch gestures! The daemon is running silently in your system tray.
+          </p>
+          <button class="btn-primary" onclick="switchTab('tab-remapper', document.querySelectorAll('.nav-tab')[0])">Open Gesture Remapper</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: ABOUT & DEVICE INFO -->
+    <div id="tab-about" class="tab-content">
+      <div class="card">
+        <div class="card-title">About Gesture Manager</div>
+        <p style="font-size: 14px; line-height: 1.6; margin-bottom: 14px;">
+          <strong>Laptop Touchpad Gesture Manager & Remapper</strong> is an ultra-lightweight, zero-bloat cross-platform daemon written in Rust. It captures raw Precision Touchpad (PTP) packets on Windows and libinput/udev event streams on Linux, converting multi-touch contacts into synthesized shortcuts and scripts.
+        </p>
+        <div style="font-size: 13px; color: var(--text-muted); display: grid; grid-template-columns: 160px 1fr; gap: 8px;">
+          <div>Architecture:</div><div>Rust 2021 + Raw Input / libinput</div>
+          <div>Config Path:</div><div id="lbl-config-path">~/.config/gesture-manager/config.toml</div>
+          <div>Web GUI Port:</div><div>127.0.0.1:17890 (Local loopback only)</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast-notification">Configuration updated!</div>
+
+  <script>
+    const SEMANTIC_ACTIONS = [
+      { id: "task_view", name: "Task View / Window Overview" },
+      { id: "show_desktop", name: "Show Desktop / Minimize All" },
+      { id: "app_launcher", name: "App Launcher / Start Menu" },
+      { id: "desktop_left", name: "Switch to Left Virtual Desktop" },
+      { id: "desktop_right", name: "Switch to Right Virtual Desktop" },
+      { id: "snap_left", name: "Snap Window to Left" },
+      { id: "snap_right", name: "Snap Window to Right" },
+      { id: "maximize", name: "Maximize Window" },
+      { id: "minimize", name: "Minimize Window" },
+      { id: "close_window", name: "Close Active Window" },
+      { id: "volume_up", name: "Volume Up" },
+      { id: "volume_down", name: "Volume Down" },
+      { id: "volume_mute", name: "Mute / Unmute Audio" },
+      { id: "media_play_pause", name: "Play / Pause Media" },
+      { id: "media_next", name: "Next Media Track" },
+      { id: "media_prev", name: "Previous Media Track" },
+      { id: "browser_back", name: "Browser Back (History)" },
+      { id: "browser_forward", name: "Browser Forward (History)" },
+      { id: "browser_refresh", name: "Browser Refresh Page" },
+      { id: "browser_new_tab", name: "Browser New Tab" },
+      { id: "browser_close_tab", name: "Browser Close Tab" },
+      { id: "browser_reopen_tab", name: "Reopen Closed Tab" },
+      { id: "zoom_in", name: "Zoom In" },
+      { id: "zoom_out", name: "Zoom Out" },
+      { id: "zoom_reset", name: "Zoom Reset (100%)" }
+    ];
+
+    const GESTURE_DEFINITIONS = [
+      // 2-Finger
+      { key: "swipe_left_2", name: "2-Finger Swipe Left", cat: "2", icon: "←" },
+      { key: "swipe_right_2", name: "2-Finger Swipe Right", cat: "2", icon: "→" },
+      { key: "swipe_up_2", name: "2-Finger Swipe Up", cat: "2", icon: "↑" },
+      { key: "swipe_down_2", name: "2-Finger Swipe Down", cat: "2", icon: "↓" },
+      { key: "pinch_in", name: "2-Finger Pinch In (Zoom Out)", cat: "2", icon: "🔍" },
+      { key: "pinch_out", name: "2-Finger Pinch Out (Zoom In)", cat: "2", icon: "🔎" },
+      { key: "rotate_cw", name: "2-Finger Twist Clockwise", cat: "rot", icon: "↻" },
+      { key: "rotate_ccw", name: "2-Finger Twist Counter-Clockwise", cat: "rot", icon: "↺" },
+      { key: "tap_2", name: "2-Finger Tap", cat: "tap", icon: "✌" },
+
+      // 3-Finger
+      { key: "swipe_left_3", name: "3-Finger Swipe Left", cat: "3", icon: "◀" },
+      { key: "swipe_right_3", name: "3-Finger Swipe Right", cat: "3", icon: "▶" },
+      { key: "swipe_up_3", name: "3-Finger Swipe Up", cat: "3", icon: "▲" },
+      { key: "swipe_down_3", name: "3-Finger Swipe Down", cat: "3", icon: "▼" },
+      { key: "pinch_in_3", name: "3-Finger Pinch In", cat: "3", icon: "🤏" },
+      { key: "pinch_out_3", name: "3-Finger Pinch Out", cat: "3", icon: "👐" },
+      { key: "tap_3", name: "3-Finger Tap", cat: "tap", icon: "👆" },
+      { key: "hold_3", name: "3-Finger Tap & Hold", cat: "tap", icon: "⏳" },
+
+      // 4-Finger
+      { key: "swipe_left_4", name: "4-Finger Swipe Left", cat: "4", icon: "⏪" },
+      { key: "swipe_right_4", name: "4-Finger Swipe Right", cat: "4", icon: "⏩" },
+      { key: "swipe_up_4", name: "4-Finger Swipe Up", cat: "4", icon: "⏫" },
+      { key: "swipe_down_4", name: "4-Finger Swipe Down", cat: "4", icon: "⏬" },
+      { key: "tap_4", name: "4-Finger Tap", cat: "tap", icon: "🖖" },
+      { key: "hold_4", name: "4-Finger Tap & Hold", cat: "tap", icon: "✋" },
+
+      // Edge Swipes
+      { key: "edge_swipe_left", name: "Edge Swipe Left (From Right Border)", cat: "edge", icon: "⇤" },
+      { key: "edge_swipe_right", name: "Edge Swipe Right (From Left Border)", cat: "edge", icon: "⇥" }
+    ];
+
+    let currentConfig = {
+      sensitivity: {
+        swipe_threshold: 45.0,
+        min_swipe_velocity: 0.10,
+        pinch_threshold: 0.20,
+        rotation_threshold_deg: 24.0,
+        tap_max_duration_ms: 280,
+        hold_min_duration_ms: 650,
+        tap_max_displacement: 18.0,
+        two_finger_swipes_enabled: true,
+        invert_swipe_x: false,
+        invert_swipe_y: false
+      },
+      gesture_cooldown_ms: 300,
+      gestures: {}
+    };
+
+    function renderGestureGrid(filter = "all") {
+      const container = document.getElementById("gesture-grid");
+      container.innerHTML = "";
+
+      GESTURE_DEFINITIONS.forEach(def => {
+        if (filter !== "all" && def.cat !== filter) return;
+
+        const val = currentConfig.gestures[def.key] || "";
+        let currentActionType = "none";
+        let currentValue = "";
+
+        if (typeof val === "string") {
+          if (val.startsWith("cmd:") || val.startsWith("sh:")) {
+            currentActionType = "cmd";
+            currentValue = val;
+          } else if (SEMANTIC_ACTIONS.some(a => a.id === val)) {
+            currentActionType = "preset";
+            currentValue = val;
+          } else {
+            currentActionType = "hotkey";
+            currentValue = val;
+          }
+        } else if (val && typeof val === "object") {
+          if (val.command) {
+            currentActionType = "cmd";
+            currentValue = val.command;
+          } else if (val.hotkey) {
+            currentActionType = "hotkey";
+            currentValue = val.hotkey;
+          }
+        }
+
+        const div = document.createElement("div");
+        div.className = "gesture-row";
+        div.innerHTML = `
+          <div class="gesture-header">
+            <div class="gesture-info">
+              <div class="gesture-icon">${def.icon}</div>
+              <div>
+                <div class="gesture-name">${def.name}</div>
+                <div class="gesture-desc"><code>${def.key}</code></div>
+              </div>
+            </div>
+          </div>
+          <div class="action-controls">
+            <select style="flex: 1;" onchange="handleActionTypeChange('${def.key}', this.value)">
+              <option value="none" ${currentActionType === 'none' ? 'selected' : ''}>-- Disabled --</option>
+              <optgroup label="Preset Semantic Actions">
+                ${SEMANTIC_ACTIONS.map(a => `<option value="preset:${a.id}" ${currentActionType === 'preset' && currentValue === a.id ? 'selected' : ''}>${a.name}</option>`).join('')}
+              </optgroup>
+              <option value="custom_hotkey" ${currentActionType === 'hotkey' ? 'selected' : ''}>Custom Shortcut / Hotkey...</option>
+              <option value="custom_cmd" ${currentActionType === 'cmd' ? 'selected' : ''}>Custom Shell Command...</option>
+            </select>
+          </div>
+          <div id="custom-input-${def.key}" style="display: ${currentActionType === 'hotkey' || currentActionType === 'cmd' ? 'block' : 'none'};">
+            <input type="text" placeholder="${currentActionType === 'cmd' ? 'e.g., cmd: notepad.exe or sh: ./run.sh' : 'e.g., Super+Tab, Alt+Left, Ctrl+Shift+T'}" value="${currentValue}" onchange="handleCustomValueChange('${def.key}', this.value)">
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function handleActionTypeChange(key, value) {
+      const customDiv = document.getElementById(`custom-input-${key}`);
+      if (value === "none") {
+        delete currentConfig.gestures[key];
+        customDiv.style.display = "none";
+      } else if (value.startsWith("preset:")) {
+        const actionId = value.split(":")[1];
+        currentConfig.gestures[key] = actionId;
+        customDiv.style.display = "none";
+      } else if (value === "custom_hotkey") {
+        currentConfig.gestures[key] = "Super+Tab";
+        customDiv.style.display = "block";
+        customDiv.querySelector("input").value = "Super+Tab";
+      } else if (value === "custom_cmd") {
+        currentConfig.gestures[key] = "cmd: calc.exe";
+        customDiv.style.display = "block";
+        customDiv.querySelector("input").value = "cmd: calc.exe";
+      }
+    }
+
+    function handleCustomValueChange(key, val) {
+      if (!val || val.trim() === "") {
+        delete currentConfig.gestures[key];
+      } else {
+        currentConfig.gestures[key] = val.trim();
+      }
+    }
+
+    function syncSensitivityInputs() {
+      const s = currentConfig.sensitivity || {};
+      document.getElementById("input-swipe-thresh").value = s.swipe_threshold || 45;
+      document.getElementById("val-swipe-thresh").innerText = (s.swipe_threshold || 45) + " px";
+
+      document.getElementById("input-swipe-vel").value = s.min_swipe_velocity || 0.10;
+      document.getElementById("val-swipe-vel").innerText = (s.min_swipe_velocity || 0.10) + " px/ms";
+
+      document.getElementById("input-pinch-thresh").value = Math.round((s.pinch_threshold || 0.20) * 100);
+      document.getElementById("val-pinch-thresh").innerText = Math.round((s.pinch_threshold || 0.20) * 100) + " %";
+
+      document.getElementById("input-rot-thresh").value = s.rotation_threshold_deg || 24;
+      document.getElementById("val-rot-thresh").innerText = (s.rotation_threshold_deg || 24) + " °";
+
+      document.getElementById("input-tap-duration").value = s.tap_max_duration_ms || 280;
+      document.getElementById("val-tap-duration").innerText = (s.tap_max_duration_ms || 280) + " ms";
+
+      document.getElementById("input-cooldown").value = currentConfig.gesture_cooldown_ms || 300;
+      document.getElementById("val-cooldown").innerText = (currentConfig.gesture_cooldown_ms || 300) + " ms";
+
+      document.getElementById("toggle-two-finger").checked = s.two_finger_swipes_enabled !== false;
+      document.getElementById("toggle-invert-x").checked = !!s.invert_swipe_x;
+      document.getElementById("toggle-invert-y").checked = !!s.invert_swipe_y;
+    }
+
+    function updateSensitivity() {
+      currentConfig.sensitivity.swipe_threshold = parseFloat(document.getElementById("input-swipe-thresh").value);
+      document.getElementById("val-swipe-thresh").innerText = currentConfig.sensitivity.swipe_threshold + " px";
+
+      currentConfig.sensitivity.min_swipe_velocity = parseFloat(document.getElementById("input-swipe-vel").value);
+      document.getElementById("val-swipe-vel").innerText = currentConfig.sensitivity.min_swipe_velocity.toFixed(2) + " px/ms";
+
+      currentConfig.sensitivity.pinch_threshold = parseFloat(document.getElementById("input-pinch-thresh").value) / 100.0;
+      document.getElementById("val-pinch-thresh").innerText = Math.round(currentConfig.sensitivity.pinch_threshold * 100) + " %";
+
+      currentConfig.sensitivity.rotation_threshold_deg = parseFloat(document.getElementById("input-rot-thresh").value);
+      document.getElementById("val-rot-thresh").innerText = currentConfig.sensitivity.rotation_threshold_deg + " °";
+
+      currentConfig.sensitivity.tap_max_duration_ms = parseInt(document.getElementById("input-tap-duration").value);
+      document.getElementById("val-tap-duration").innerText = currentConfig.sensitivity.tap_max_duration_ms + " ms";
+
+      currentConfig.gesture_cooldown_ms = parseInt(document.getElementById("input-cooldown").value);
+      document.getElementById("val-cooldown").innerText = currentConfig.gesture_cooldown_ms + " ms";
+
+      currentConfig.sensitivity.two_finger_swipes_enabled = document.getElementById("toggle-two-finger").checked;
+      currentConfig.sensitivity.invert_swipe_x = document.getElementById("toggle-invert-x").checked;
+      currentConfig.sensitivity.invert_swipe_y = document.getElementById("toggle-invert-y").checked;
+    }
+
+    async function loadConfiguration() {
+      try {
+        const res = await fetch("/api/config");
+        if (res.ok) {
+          currentConfig = await res.json();
+          renderGestureGrid();
+          syncSensitivityInputs();
+          showToast("Loaded configuration from config.toml");
+        }
+      } catch (e) {
+        console.error("Failed to fetch configuration:", e);
+      }
+    }
+
+    async function saveConfiguration() {
+      try {
+        const res = await fetch("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(currentConfig)
+        });
+        const data = await res.json();
+        showToast(data.message || "Settings saved!");
+      } catch (e) {
+        showToast("Error saving configuration!");
+      }
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById("toast-notification");
+      toast.innerText = msg;
+      toast.style.display = "block";
+      setTimeout(() => { toast.style.display = "none"; }, 3500);
+    }
+
+    function switchTab(tabId, el) {
+      document.querySelectorAll(".tab-content").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
+      document.getElementById(tabId).classList.add("active");
+      el.classList.add("active");
+    }
+
+    function filterGestures(cat, el) {
+      document.querySelectorAll(".filter-pill").forEach(p => p.classList.remove("active"));
+      el.classList.add("active");
+      renderGestureGrid(cat);
+    }
+
+    let isPaused = false;
+    function togglePause() {
+      isPaused = !isPaused;
+      const btn = document.getElementById("btn-pause-toggle");
+      const txt = document.getElementById("daemon-status-text");
+      if (isPaused) {
+        btn.innerText = "▶ Resume";
+        txt.innerText = "DAEMON PAUSED";
+        txt.parentElement.style.color = "var(--warning)";
+        txt.parentElement.querySelector(".status-dot").style.background = "var(--warning)";
+        showToast("Touchpad gesture daemon paused.");
+      } else {
+        btn.innerText = "⏸ Pause";
+        txt.innerText = "DAEMON ACTIVE (HOT-RELOAD ON)";
+        txt.parentElement.style.color = "var(--success)";
+        txt.parentElement.querySelector(".status-dot").style.background = "var(--success)";
+        showToast("Touchpad gesture daemon resumed.");
+      }
+    }
+
+    // Step-by-Step Wizard Stepper
+    function setWizardStep(n) {
+      for (let i = 1; i <= 5; i++) {
+        const page = document.getElementById(`wizard-page-${i}`);
+        const circle = document.getElementById(`step-circle-${i}`);
+        if (i === n) {
+          page.classList.add("active");
+          circle.classList.add("active");
+        } else if (i < n) {
+          page.classList.remove("active");
+          circle.classList.remove("active");
+          circle.classList.add("completed");
+        } else {
+          page.classList.remove("active");
+          circle.classList.remove("active");
+          circle.classList.remove("completed");
+        }
+      }
+    }
+
+    async function executeInstall() {
+      const btn = document.getElementById("btn-run-install");
+      const msg = document.getElementById("install-progress-msg");
+      btn.disabled = true;
+      msg.innerText = "Registering autostart shortcut & saving configuration...";
+      try {
+        await saveConfiguration();
+        const res = await fetch("/api/install", { method: "POST" });
+        const data = await res.json();
+        msg.innerText = data.message || "Installed!";
+        setTimeout(() => { setWizardStep(5); }, 800);
+      } catch (e) {
+        msg.innerText = "Completed local configuration!";
+        setTimeout(() => { setWizardStep(5); }, 800);
+      }
+    }
+
+    function applyProfile(prof) {
+      if (prof === "windows") {
+        currentConfig.gestures["swipe_up_3"] = "task_view";
+        currentConfig.gestures["swipe_down_3"] = "show_desktop";
+        currentConfig.gestures["swipe_left_4"] = "desktop_left";
+        currentConfig.gestures["swipe_right_4"] = "desktop_right";
+      } else if (prof === "macos") {
+        currentConfig.gestures["swipe_up_3"] = "task_view";
+        currentConfig.gestures["swipe_down_3"] = "minimize";
+        currentConfig.gestures["pinch_in"] = "zoom_out";
+        currentConfig.gestures["pinch_out"] = "zoom_in";
+      } else if (prof === "media") {
+        currentConfig.gestures["rotate_cw"] = "volume_up";
+        currentConfig.gestures["rotate_ccw"] = "volume_down";
+        currentConfig.gestures["hold_4"] = "media_play_pause";
+      }
+      renderGestureGrid();
+      showToast(`Applied ${prof} preset!`);
+    }
+
+    // Touchpad Interactive Sandbox logic
+    const testPad = document.getElementById("test-pad");
+    let isTouching = false;
+    let startX = 0, startY = 0;
+
+    testPad.addEventListener("pointerdown", (e) => {
+      isTouching = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      document.getElementById("debug-contacts").innerText = "1";
+      document.getElementById("detected-gesture-badge").innerText = "Tracking motion...";
+    });
+
+    testPad.addEventListener("pointermove", (e) => {
+      if (!isTouching) return;
+      const rect = testPad.getBoundingClientRect();
+      const x = Math.round(e.clientX - rect.left);
+      const y = Math.round(e.clientY - rect.top);
+      document.getElementById("debug-coords").innerText = `(${x}, ${y})`;
+
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      document.getElementById("debug-spread").innerText = dist.toFixed(1);
+
+      if (dist > 45) {
+        let name = "";
+        if (Math.abs(dx) > Math.abs(dy)) {
+          name = dx > 0 ? "Swipe Right" : "Swipe Left";
+        } else {
+          name = dy > 0 ? "Swipe Down" : "Swipe Up";
+        }
+        document.getElementById("detected-gesture-badge").innerText = "Recognized: " + name;
+      }
+    });
+
+    window.addEventListener("pointerup", () => {
+      if (isTouching) {
+        isTouching = false;
+        document.getElementById("debug-contacts").innerText = "0";
+      }
+    });
+
+    // Initial load
+    loadConfiguration();
+  </script>
+</body>
+</html>

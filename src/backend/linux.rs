@@ -9,9 +9,9 @@ use crate::gesture::{Gesture, GestureRecognizer, GestureSensitivity, TouchFrame,
 use crossbeam_channel::Sender;
 use input::event::gesture::{
     GestureEvent, GestureEventCoordinates, GestureEventTrait, GesturePinchEvent,
-    GesturePinchEventTrait, GestureSwipeEvent, GestureSwipeEventTrait,
+    GesturePinchEventTrait, GestureSwipeEvent,
 };
-use input::event::touch::{TouchEvent, TouchEventPosition, TouchEventSlot, TouchEventTrait};
+use input::event::touch::{TouchEvent, TouchEventPosition, TouchEventSlot};
 use input::event::Event;
 use input::{Libinput, LibinputInterface};
 use std::collections::HashMap;
@@ -71,16 +71,7 @@ impl GestureBackend for LinuxLibinputBackend {
         let handle = thread::Builder::new()
             .name("linux-libinput-backend".into())
             .spawn(move || {
-                let mut udev_context = match udev::Context::new() {
-                    Ok(ctx) => ctx,
-                    Err(e) => {
-                        log::error!("Failed to initialize udev context: {}", e);
-                        is_running_clone.store(false, Ordering::SeqCst);
-                        return;
-                    }
-                };
-
-                let mut input = Libinput::new_from_udev(RestrictedInterface, &udev_context);
+                let mut input = Libinput::new_with_udev(RestrictedInterface);
                 if let Err(e) = input.udev_assign_seat("seat0") {
                     log::error!(
                         "Failed to assign seat0 for libinput: {:?}. Ensure user is in 'input' group.",
@@ -180,7 +171,7 @@ impl GestureBackend for LinuxLibinputBackend {
                                 Event::Touch(touch_event) => {
                                     match touch_event {
                                         TouchEvent::Down(down) => {
-                                            let slot = down.slot();
+                                            let slot = down.slot().map(|s| s as i32).unwrap_or(0);
                                             active_slots.insert(
                                                 slot,
                                                 TouchPoint {
@@ -198,7 +189,7 @@ impl GestureBackend for LinuxLibinputBackend {
                                             }
                                         }
                                         TouchEvent::Motion(motion) => {
-                                            let slot = motion.slot();
+                                            let slot = motion.slot().map(|s| s as i32).unwrap_or(0);
                                             active_slots.insert(
                                                 slot,
                                                 TouchPoint {
@@ -216,7 +207,7 @@ impl GestureBackend for LinuxLibinputBackend {
                                             }
                                         }
                                         TouchEvent::Up(up) => {
-                                            let slot = up.slot();
+                                            let slot = up.slot().map(|s| s as i32).unwrap_or(0);
                                             active_slots.remove(&slot);
                                             let frame = TouchFrame::new(
                                                 active_slots.values().copied().collect(),
@@ -227,7 +218,7 @@ impl GestureBackend for LinuxLibinputBackend {
                                             }
                                         }
                                         TouchEvent::Cancel(cancel) => {
-                                            let slot = cancel.slot();
+                                            let slot = cancel.slot().map(|s| s as i32).unwrap_or(0);
                                             active_slots.remove(&slot);
                                             let frame = TouchFrame::new(
                                                 active_slots.values().copied().collect(),

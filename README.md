@@ -151,9 +151,43 @@ hold_4 = "media_play_pause"
 
 ---
 
+## Advanced GUI Configurator & Live Test Sandbox
+
+Launch the advanced GUI control panel anytime:
+```bash
+gesture-manager --gui
+```
+Or right-click the system tray icon and select **"Open GUI Configurator"**.
+
+### GUI Features:
+* **Interactive Trackpad Sandbox:** Visualize multi-finger contacts, pinch deltas, and live swipe vectors directly on screen in real time.
+* **Sensitivity Sliders:** Adjust swipe distance, velocity, pinch thresholds, and rotation sensitivity dynamically.
+* **Point-and-Click Remapper:** Easily map 2, 3, and 4-finger swipes, pinches, rotation, and taps to any shortcut or system command.
+* **Step-by-Step Setup Wizard:** Built-in walkthrough guiding users through OS permissions, touchpad checks, and autostart registration.
+
+---
+
+## Windows Step-by-Step Setup Installer
+
+For Windows users, an automated NSIS installer (`gesture-manager-setup.exe`) is generated in GitHub Actions releases:
+* **Welcome Screen** & license overview.
+* **Components Selection** (Daemon executable, Desktop shortcuts, Start menu items).
+* **Install Directory Selection** (`%LOCALAPPDATA%\GestureManager`).
+* **Windows Login Autostart** setup.
+* **1-Click Launch Finish Screen** with automatic GUI wizard popup.
+* **Clean Uninstaller** registered with Windows *Settings > Apps & Features*.
+
+---
+
 ## CLI Commands
 
 ```bash
+# Launch the interactive GUI configurator & touchpad test sandbox
+gesture-manager --gui
+
+# Run step-by-step installation / autostart setup
+gesture-manager --install
+
 # Display help and usage options
 gesture-manager --help
 
