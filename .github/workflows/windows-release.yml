@@ -1,0 +1,125 @@
+name: Windows Release (.exe)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v0.1.0)'
+        required: false
+        default: 'v0.1.0'
+      draft:
+        description: 'Publish as draft release?'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish-windows:
+    name: Build & Release Windows EXE
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build release binary
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Stage Windows distribution artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          New-Item -ItemType Directory -Force -Path dist/bundle
+
+          # Check candidate binary locations
+          $candidates = @(
+            "target/x86_64-pc-windows-msvc/release/gesture-manager.exe",
+            "target/release/gesture-manager.exe"
+          )
+
+          $binPath = $null
+          foreach ($p in $candidates) {
+            if (Test-Path $p) {
+              $binPath = $p
+              break
+            }
+          }
+
+          if (-not $binPath) {
+            Write-Error "Could not find compiled gesture-manager.exe in target directories!"
+            exit 1
+          }
+
+          Write-Host "Found compiled executable at: $binPath"
+
+          # 1. Standalone executable files
+          Copy-Item $binPath "dist/gesture-manager.exe"
+          Copy-Item $binPath "dist/gesture-manager-windows-x86_64.exe"
+
+          # 2. Prepare portable zip distribution bundle
+          Copy-Item $binPath "dist/bundle/gesture-manager.exe"
+          if (Test-Path "README.md") {
+            Copy-Item "README.md" "dist/bundle/"
+          }
+
+          # Create run and autostart batch helpers
+          Set-Content -Path "dist/bundle/start-gesture-manager.bat" -Value "@echo off`r`nstart """" ""%~dp0gesture-manager.exe"""
+          Set-Content -Path "dist/bundle/add-to-startup.bat" -Value "@echo off`r`npowershell -Command ""`$s=(New-Object -COM WScript.Shell).CreateShortcut('`$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\gesture-manager.lnk');`$s.TargetPath='%~dp0gesture-manager.exe';`$s.Save()""`r`necho Touchpad Gesture Manager added to Windows Startup."
+          Set-Content -Path "dist/bundle/remove-from-startup.bat" -Value "@echo off`r`ndel /f /q ""%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\gesture-manager.lnk""`r`necho Touchpad Gesture Manager removed from Windows Startup."
+
+          # Generate sample config via self-check
+          & "dist/gesture-manager.exe" --no-tray --check-config
+
+          # Create zip archive
+          Compress-Archive -Path dist/bundle/* -DestinationPath dist/gesture-manager-windows-x86_64.zip -Force
+
+          # Clean up temporary bundle directory
+          Remove-Item -Recurse -Force dist/bundle
+
+          Write-Host "=== Output Release Files ==="
+          Get-ChildItem dist
+
+      - name: Upload artifacts to Actions summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-binaries
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
+          name: Release ${{ github.event.inputs.tag_name || github.ref_name }}
+          files: |
+            dist/gesture-manager.exe
+            dist/gesture-manager-windows-x86_64.exe
+            dist/gesture-manager-windows-x86_64.zip
+          generate_release_notes: true
+          draft: ${{ github.event.inputs.draft == 'true' }}
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
